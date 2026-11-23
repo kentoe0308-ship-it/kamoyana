@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>スマブラ風ゲーム — 吹っ飛ばしバトル</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root{
+    --bg:#eef1ee; --panel:#ffffff; --panel2:#f4f6f3; --ink:#17201a; --ink2:#4c5a50;
+    --line:#d5ddd3; --accent:#e4572e; --accent-ink:#ffffff; --p1:#2277cc; --p2:#e23b3b;
+    --good:#1d8a4e; --warn:#b7791f; --danger:#c62f2f;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#10140f; --panel:#1a201a; --panel2:#212922; --ink:#eef3ec; --ink2:#a9b8ab;
+      --line:#333f34; --accent:#ff6b3d; --accent-ink:#1a0e08;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Yu Gothic",Meiryo,system-ui,sans-serif;
+    line-height:1.6; -webkit-tap-highlight-color:transparent;
+  }
+  button,[role="button"],select,input:not([type="checkbox"]){min-height:2.25rem}
+  button{font:inherit; cursor:pointer}
+  .wrap{max-width:1020px;margin:0 auto;padding:14px 14px 40px}
+  /* ---------- top bar ---------- */
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .topbar h1{font-size:20px;margin:0;letter-spacing:.02em;font-weight:800}
+  .topbar h1 .sub{font-size:12px;font-weight:600;color:var(--ink2);margin-left:8px;letter-spacing:0}
+  .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{
+    border:1.5px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:10px; padding:8px 14px; font-weight:700; font-size:14px; min-height:40px;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.ghost{background:transparent}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  /* ---------- mode tabs ---------- */
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .mode-btn{
+    border:2px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:var(--radius); padding:10px 8px; text-align:left; min-height:64px;
+  }
+  .mode-btn b{display:block;font-size:15px}
+  .mode-btn span{display:block;font-size:12px;color:var(--ink2);font-weight:500;margin-top:2px}
+  .mode-btn[aria-pressed="true"]{border-color:var(--accent); background:var(--panel2)}
+  @media (max-width:560px){ .modes{grid-template-columns:1fr} .mode-btn{min-height:52px} }
+  /* ---------- online panel ---------- */
+  .online-panel{
+    display:block; border:2px solid var(--accent); background:var(--panel);
+    border-radius:var(--radius); padding:14px; margin-bottom:10px;
+  }
+  .online-panel.show{display:block}
+  .online-panel h2{font-size:15px;margin:0 0 6px}
+  .online-panel p{font-size:13px;color:var(--ink2);margin:0 0 10px}
+  .online-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:640px){.online-grid{grid-template-columns:1fr}}
+  .online-box{border:1px dashed var(--line);border-radius:10px;padding:12px}
+  .online-box h3{font-size:13px;margin:0 0 8px}
+  .code-display{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:30px; font-weight:800;
+    letter-spacing:.35em; text-align:center; padding:8px 4px 8px 12px; background:var(--panel2);
+    border-radius:8px; min-height:56px; display:flex;align-items:center;justify-content:center;
+  }
+  .code-display.empty{font-size:13px;letter-spacing:0;color:var(--ink2);font-weight:600}
+  .join-row{display:flex;gap:8px;min-width:0}
+  .join-row input{
+    flex:1 1 0; width:0; min-width:0; font:inherit; font-size:20px; font-weight:800; letter-spacing:.2em;
+    text-transform:uppercase; text-align:center; border:1.5px solid var(--line);
+    border-radius:10px; background:var(--panel2); color:var(--ink); padding:8px; min-height:44px;
+  }
+  .join-row .btn{flex:0 0 auto}
+  .online-box{min-width:0}
+  .status-line{font-size:13px;font-weight:700;margin-top:10px;min-height:22px}
+  .status-line.ok{color:var(--good)} .status-line.err{color:var(--danger)} .status-line.wait{color:var(--warn)}
+  /* ---------- stage ---------- */
+  .stage-shell{
+    position:relative; border-radius:18px; overflow:hidden; background:#79b5d9;
+    border:2px solid var(--line); aspect-ratio:16/9; max-height:72vh; margin:0 auto; width:100%;
+  }
+  canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .overlay{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
+    background:rgba(8,14,20,.68); color:#fff; text-align:center; padding:20px; z-index:5;
+  }
+  .overlay.show{display:flex}
+  .overlay .big{font-size:clamp(28px,6vw,52px);font-weight:900;letter-spacing:.04em;margin:0 0 6px;text-shadow:0 3px 0 rgba(0,0,0,.35)}
+  .overlay .small{font-size:14px;opacity:.92;margin:0 0 16px}
+  .overlay .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .overlay .btn{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.12);color:#fff}
+  .overlay .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .countdown{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:4;pointer-events:none;
+    font-size:clamp(56px,12vw,110px);font-weight:900;color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.4),0 0 34px rgba(0,0,0,.25);
+  }
+  .countdown.show{display:flex}
+  /* HUD */
+  .hud{
+    position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;justify-content:space-between;
+    padding:10px 14px;pointer-events:none;gap:10px;
+  }
+  .fighter-card{min-width:118px}
+  .fighter-card.right{text-align:right}
+  .fighter-card .name{font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);letter-spacing:.06em}
+  .fighter-card .pct{font-size:clamp(30px,5.5vw,46px);font-weight:900;line-height:1;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.45);font-variant-numeric:tabular-nums}
+  .fighter-card .pct small{font-size:.5em;font-weight:800}
+  .stocks{display:flex;gap:5px;margin-top:4px}
+  .fighter-card.right .stocks{justify-content:flex-end}
+  .stock{width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,.85);box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .stock.lost{opacity:.18}
+  .stock.s1{background:var(--p1)} .stock.s2{background:var(--p2)}
+  /* ---------- touch controls ---------- */
+  .touch{display:none;margin-top:10px;gap:8px;flex-wrap:wrap}
+  @media (pointer:coarse){ .touch{display:flex} }
+  .touch.always{display:flex}
+  .touch .cluster{display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap}
+  .touch .spacer{flex:1;min-width:4px}
+  .tbtn{
+    width:58px;height:58px;border-radius:50%;border:2px solid var(--line);background:var(--panel);
+    color:var(--ink);font-weight:800;font-size:13px;user-select:none;-webkit-user-select:none;touch-action:none;
+    display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.15;padding:4px;flex:0 0 auto;
+  }
+  @media (max-width:640px){
+    .touch{gap:6px}
+    .touch .spacer{display:none}
+    .touch .cluster{gap:5px}
+    .tbtn{width:46px;height:46px;font-size:10.5px;border-width:1.5px}
+    .tbtn.wide{width:50px}
+    .topbar h1{font-size:17px}
+    .topbar h1 .sub{display:block;margin-left:0;margin-top:2px}
+  }
+  .tbtn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .tbtn.wide{width:64px}
+  .touch-2p{display:none;margin-top:8px;gap:10px}
+  .touch-2p.show{display:flex}
+  @media (pointer:fine){ .touch-2p.show{display:none} .touch-2p.show.force{display:flex} }
+  .p2-label{font-size:11px;font-weight:800;color:var(--ink2);text-align:center}
+  /* ---------- info ---------- */
+  .info{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  @media (max-width:700px){.info{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1.5px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .card h2{font-size:14px;margin:0 0 8px}
+  .card p,.card li{font-size:13px;color:var(--ink2)}
+  .card p{margin:0 0 6px}
+  .card ul{margin:0;padding-left:18px}
+  .keys{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:13px}
+  .keys div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted var(--line);padding:3px 0}
+  .keys b{font-weight:700;color:var(--ink)}
+  kbd{
+    font-family:ui-monospace,Menlo,monospace;font-size:11px;background:var(--panel2);border:1px solid var(--line);
+    border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--ink);white-space:nowrap;
+  }
+  .note{font-size:12px;color:var(--ink2);margin-top:12px}
+  .flash{
+    position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:4;pointer-events:none;
+    font-weight:900;font-size:clamp(18px,3.5vw,28px);color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.5);
+    opacity:0;transition:opacity .15s;letter-spacing:.05em;white-space:nowrap;
+  }
+  .flash.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <h1>吹っ飛ばしバトル<span class="sub">ダメージが溜まるほど、遠くへ飛ぶ</span></h1>
+    <div class="top-actions">
+      <button class="btn" id="btn-sound" type="button" aria-pressed="true">音：オン</button>
+      <button class="btn" id="btn-restart" type="button">最初から</button>
+    </div>
+  </div>
+
+  <div class="modes" role="group" aria-label="対戦モード">
+    <button class="mode-btn" id="mode-cpu" type="button" aria-pressed="true"><b>CPU対戦</b><span>1人でコンピュータと対戦</span></button>
+    <button class="mode-btn" id="mode-local" type="button" aria-pressed="false"><b>ローカル2P</b><span>同じ画面・同じ端末で2人対戦</span></button>
+    <button class="mode-btn" id="mode-online" type="button" aria-pressed="false"><b>オンライン対戦</b><span>ルームコードで友達と対戦（2台）</span></button>
+  </div>
+
+  <section class="online-panel show" id="online-panel" aria-label="オンライン対戦の設定">
+    <h2>オンライン対戦 — ルームコードを入力して合流</h2>
+    <p>友達と2台で対戦するときはここを使います。ホストがルームを作ると4文字のコードが出ます。そのコードを友達に伝え、友達が下の「ルームコードを入力」欄に入れると対戦が始まります。2人ともこのページを開いている必要があります。</p>
+    <div class="online-grid">
+      <div class="online-box">
+        <h3>ルームに入る（ゲスト）— ルームコードを入力</h3>
+        <label for="join-code" style="display:block;font-size:13px;font-weight:700;margin-bottom:6px">ルームコードを入力（4文字）</label>
+        <div class="join-row">
+          <input id="join-code" maxlength="4" placeholder="ABCD" autocomplete="off" autocapitalize="characters" inputmode="text" aria-label="ルームコードを入力" />
+          <button class="btn primary" id="btn-join-room" type="button">入る</button>
+        </div>
+        <p style="margin-top:8px">友達から聞いた4文字をここに入力して「入る」を押してください。</p>
+      </div>
+      <div class="online-box">
+        <h3>ルームを作る（ホスト）</h3>
+        <div class="code-display empty" id="room-code">まだ作っていません</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" id="btn-create-room" type="button">ルームを作る</button>
+          <button class="btn" id="btn-copy-code" type="button" disabled>コードをコピー</button>
+        </div>
+        <p style="margin-top:8px">作ったコードを友達に伝えて、上の欄に入れてもらってください。</p>
+      </div>
+    </div>
+    <div class="status-line" id="online-status" role="status"></div>
+  </section>
+
+  <div class="stage-shell" id="stage-shell">
+    <canvas id="game" width="960" height="540"></canvas>
+    <div class="flash" id="flash"></div>
+    <div class="countdown" id="countdown"></div>
+    <div class="hud">
+      <div class="fighter-card">
+        <div class="name" id="name-p1">PLAYER 1</div>
+        <div class="pct" id="pct-p1">0<small>%</small></div>
+        <div class="stocks" id="stocks-p1"></div>
+      </div>
+      <div class="fighter-card right">
+        <div class="name" id="name-p2">CPU</div>
+        <div class="pct" id="pct-p2">0<small>%</small></div>
+        <div class="stocks" id="stocks-p2"></div>
+      </div>
+    </div>
+    <div class="overlay show" id="overlay">
+      <p class="big" id="overlay-title">吹っ飛ばしバトル</p>
+      <p class="small" id="overlay-text">攻撃を当てて相手の％を溜め、場外へ吹っ飛ばそう。ストック3つ、先に相手を全部落とした方が勝ち。</p>
+      <div class="row">
+        <button class="btn primary" id="btn-start" type="button">バトル開始</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Touch: P1 -->
+  <div class="touch" id="touch-p1" aria-label="プレイヤー1のタッチ操作">
+    <div class="cluster">
+      <button class="tbtn" data-k="left" type="button">←</button>
+      <button class="tbtn" data-k="right" type="button">→</button>
+      <button class="tbtn" data-k="jump" type="button">ジャンプ</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="cluster">
+      <button class="tbtn" data-k="shield" type="button">ガード</button>
+      <button class="tbtn" data-k="special" type="button">必殺技</button>
+      <button class="tbtn" data-k="smash" type="button">強攻撃</button>
+      <button class="tbtn wide" data-k="attack" type="button">攻撃</button>
+    </div>
+  </div>
+  <!-- Touch: P2 (local only) -->
+  <div class="touch-2p" id="touch-p2" aria-label="プレイヤー2のタッチ操作">
+    <div style="flex:1">
+      <div class="p2-label">PLAYER 2（右側の人）</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button class="tbtn" data-k2="attack" type="button">攻撃</button>
+        <button class="tbtn" data-k2="jump" type="button">ジャンプ</button>
+        <button class="tbtn" data-k2="right" type="button">→</button>
+        <button class="tbtn" data-k2="left" type="button">←</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="card">
+      <h2>ルール</h2>
+      <ul>
+        <li>体力制ではなく<b>％制</b>。攻撃を受けると％が上がり、上がるほど吹っ飛びやすくなる。</li>
+        <li>ステージの外（上下左右）に出ると<b>ミス</b>でストックが1つ減る。ストックは3つ。</li>
+        <li>ジャンプは<b>2回</b>まで（2段ジャンプ）。落とされても空中ジャンプと必殺技で復帰を狙える。</li>
+        <li>ガード中はダメージを受けない。必殺技は遠くまで届く飛び道具。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>キーボード操作</h2>
+      <div class="keys">
+        <div><b>P1 移動</b><span><kbd>A</kbd> <kbd>D</kbd></span></div>
+        <div><b>P2 移動</b><span><kbd>←</kbd> <kbd>→</kbd></span></div>
+        <div><b>P1 ジャンプ</b><span><kbd>W</kbd></span></div>
+        <div><b>P2 ジャンプ</b><span><kbd>↑</kbd></span></div>
+        <div><b>P1 攻撃 / 強 / 技</b><span><kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd></span></div>
+        <div><b>P2 攻撃 / 強 / 技</b><span><kbd>,</kbd> <kbd>.</kbd> <kbd>/</kbd></span></div>
+        <div><b>P1 ガード</b><span><kbd>S</kbd></span></div>
+        <div><b>P2 ガード</b><span><kbd>↓</kbd></span></div>
+      </div>
+      <p style="margin-top:8px">スマホでは画面下のボタンで操作できます。ローカル2Pをスマホで遊ぶときは、横向きにして2人で左右に分かれるのがおすすめです。</p>
+    </div>
+  </div>
+
+  <p class="note">オンライン対戦は PeerJS の公開サーバー経由でブラウザ同士を直接つなぐ方式です。接続できない場合は、2人ともページを開き直して新しいコードで試してください。オンライン中はホスト側の画面が対戦の基準になります。</p>
+</div>
+
+<script>
+(function(){
+"use strict";
+/* ================= constants ================= */
+var W=960,H=540;
+var PLATFORMS=[
+  {x:225,y:398,w:510,h:26},   /* main */
+  {x:262,y:288,w:132,h:14},   /* left */
+  {x:566,y:288,w:132,h:14},   /* right */
+  {x:395,y:186,w:170,h:14}    /* top */
+];
+var BLAST={left:-170,right:W+170,top:-230,bottom:H+110};
+var GRAV=0.55, MAXFALL=14;
+
+/* ================= dom ================= */
+function $(id){return document.getElementById(id);}
+var canvas=$("game"), ctx=canvas.getContext("2d");
+var overlay=$("overlay"), ovTitle=$("overlay-title"), ovText=$("overlay-text"), btnStart=$("btn-start");
+var countdownEl=$("countdown"), flashEl=$("flash");
+var pctEls=[$("pct-p1"),$("pct-p2")], stockEls=[$("stocks-p1"),$("stocks-p2")], nameEls=[$("name-p1"),$("name-p2")];
+
+/* ================= audio ================= */
+var audioCtx=null, soundOn=true;
+function beep(freq,dur,type,vol){
+  if(!soundOn) return;
+  try{
+    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==="suspended") audioCtx.resume();
+    var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type=type||"square"; o.frequency.value=freq;
+    g.gain.value=vol||0.06;
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime+dur);
+  }catch(e){}
+}
+function sHit(strong){ beep(strong?160:220, strong?0.16:0.09, "square", strong?0.10:0.06); }
+function sShoot(){ beep(660,0.10,"sawtooth",0.04); }
+function sKO(){ beep(880,0.12,"square",0.08); setTimeout(function(){beep(1320,0.22,"square",0.08);},110); }
+function sJump(){ beep(420,0.06,"sine",0.03); }
+
+/* ================= fighters ================= */
+var COLORS=[
+  {body:"#2277cc",dark:"#155a9e",skin:"#ffd9b3",name:"PLAYER 1"},
+  {body:"#e23b3b",dark:"#a92424",skin:"#ffe3c2",name:"PLAYER 2"}
+];
+function makeFighter(idx, x, y){
+  return {
+    idx:idx, x:x, y:(y==null?288:y), vx:0, vy:0, w:36, h:56,
+    facing: idx===0?1:-1,
+    percent:0, stocks:3,
+    jumps:2, onGround:false,
+    state:"idle", /* idle | hitstun | attack | dead */
+    hitstun:0, attackTimer:0, attackKind:null, attackHitDone:false, swingId:0,
+    coolAtk:0, coolSmash:0, coolSpec:0,
+    shielding:false, invincible:0, respawnTimer:0,
+    animWalk:0, color:COLORS[idx]
+  };
+}
+function fighterBox(f){ return {l:f.x-f.w/2, r:f.x+f.w/2, t:f.y-f.h, b:f.y}; }
+
+var p1=makeFighter(0,328,288), p2=makeFighter(1,632,288);
+var fighters=[p1,p2];
+var projectiles=[]; /* {x,y,vx,owner,life} */
+var particles=[];   /* {x,y,vx,vy,life,color,size} */
+var effects=[];     /* ring-out star bursts {x,y,life} */
+
+var mode="cpu"; /* cpu | local | online */
+var onlineRole=null; /* host | guest */
+var phase="title"; /* title | countdown | fight | over */
+var countTimer=0, winner=-1;
+var frame=0;
+var keys={};       /* raw keyboard */
+var inputP1=blankInput(), inputP2=blankInput(), remoteInput=blankInput();
+function blankInput(){ return {left:false,right:false,jump:false,jumpPressed:false,down:false,attack:false,smash:false,special:false,shield:false}; }
+var prevJump={p1:false,p2:false,remote:false};
+
+/* ================= input: keyboard ================= */
+var KEYMAP_P1={KeyA:"left",KeyD:"right",KeyW:"jump",KeyS:"shield",KeyF:"attack",KeyG:"smash",KeyH:"special"};
+var KEYMAP_P2={ArrowLeft:"left",ArrowRight:"right",ArrowUp:"jump",ArrowDown:"shield",Comma:"attack",Period:"smash",Slash:"special"};
+window.addEventListener("keydown",function(e){
+  if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space"].indexOf(e.code)>=0) e.preventDefault();
+  keys[e.code]=true;
+});
+window.addEventListener("keyup",function(e){ keys[e.code]=false; });
+function readKeyboard(map,out,prevKey){
+  for(var code in map){ out[map[code]]=!!keys[code]; }
+  out.jumpPressed = out.jump && !prevJump[prevKey];
+  prevJump[prevKey]=out.jump;
+}
+/* ================= input: touch ================= */
+function bindTouch(selector, attr, target, prevKey){
+  var btns=document.querySelectorAll(selector);
+  Array.prototype.forEach.call(btns,function(btn){
+    var k=btn.getAttribute(attr);
+    function on(e){ e.preventDefault(); target[k]=true; btn.classList.add("on");
+      if(k==="jump"){ target.jumpPressed=true; } }
+    function off(e){ if(e) e.preventDefault(); target[k]=false; btn.classList.remove("on"); }
+    btn.addEventListener("pointerdown",on);
+    btn.addEventListener("pointerup",off);
+    btn.addEventListener("pointerleave",off);
+    btn.addEventListener("pointercancel",off);
+    btn.addEventListener("contextmenu",function(e){e.preventDefault();});
+  });
+}
+var touchP1=blankInput(), touchP2=blankInput();
+bindTouch("#touch-p1 .tbtn","data-k",touchP1,"p1");
+bindTouch("#touch-p2 .tbtn","data-k2",touchP2,"p2");
+function mergeInputs(a,b,out){
+  for(var k in out){ if(k==="jumpPressed"){ out[k]=a[k]||b[k]; } else { out[k]=a[k]||b[k]; } }
+}
+
+/* ================= combat ================= */
+function spawnParticles(x,y,n,color,power){
+  for(var i=0;i<n;i++){
+    var a=Math.random()*Math.PI*2, s=(Math.random()*0.7+0.3)*(power||3);
+    particles.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1,life:16+Math.random()*10,color:color,size:2+Math.random()*3});
+  }
+}
+function applyHit(attacker, defender, dmg, baseKB, scale, dirX, kind){
+  if(defender.invincible>0 || defender.state==="dead") return;
+  if(defender.shielding && defender.onGround){
+    defender.vx = dirX*2.2;
+    spawnParticles(defender.x, defender.y-30, 5, "#cfe8ff", 2);
+    beep(300,0.06,"sine",0.04);
+    return;
+  }
+  defender.percent += dmg;
+  var kb = baseKB + defender.percent * scale;
+  var ang = kind==="smash" ? -0.62 : -0.42;
+  defender.vx = Math.cos(ang)*kb*dirX;
+  defender.vy = Math.sin(ang)*kb - (kind==="up"?2:0);
+  defender.hitstun = Math.min(8 + kb*1.6, 46);
+  defender.state="hitstun";
+  defender.onGround=false;
+  spawnParticles(defender.x, defender.y-30, kind==="smash"?14:8, "#fff2b0", kind==="smash"?5:3);
+  sHit(kind==="smash");
+}
+function startAttack(f, kind){
+  if(f.state==="hitstun"||f.state==="dead") return;
+  if(kind==="attack" && f.coolAtk<=0){
+    f.attackKind="attack"; f.attackTimer=14; f.attackHitDone=false; f.swingId++; f.coolAtk=24; f.state="attack";
+  }else if(kind==="smash" && f.coolSmash<=0){
+    f.attackKind="smash"; f.attackTimer=20; f.attackHitDone=false; f.swingId++; f.coolSmash=42; f.state="attack";
+    if(!f.onGround){ f.vx += f.facing*1.2; }
+  }else if(kind==="special" && f.coolSpec<=0){
+    f.coolSpec=46;
+    projectiles.push({x:f.x+f.facing*30, y:f.y-34, vx:f.facing*7.2, owner:f.idx, life:80, hitDone:false});
+    sShoot();
+    if(!f.onGround && f.jumps<2){ /* small recovery boost like an up-special hop when falling */
+      if(f.vy>2) f.vy = 1.5;
+    }
+  }
+}
+function attackHitbox(f){
+  if(f.state!=="attack") return null;
+  var activeFrom = f.attackKind==="smash"?9:5;
+  var total = f.attackKind==="smash"?20:14;
+  var elapsed = total - f.attackTimer;
+  if(elapsed<activeFrom || elapsed>activeFrom+6) return null;
+  var reach = f.attackKind==="smash"?52:44;
+  var cx = f.x + f.facing*(f.w/2 + reach/2 - 4);
+  return {l:cx-reach/2, r:cx+reach/2, t:f.y-f.h-6, b:f.y-4, cx:cx};
+}
+
+/* ================= physics ================= */
+function stepFighter(f, input, foe){
+  if(f.state==="dead"){
+    f.respawnTimer--;
+    if(f.respawnTimer<=0 && f.stocks>0){ respawn(f); }
+    return;
+  }
+  if(f.invincible>0) f.invincible--;
+  if(f.coolAtk>0)f.coolAtk--; if(f.coolSmash>0)f.coolSmash--; if(f.coolSpec>0)f.coolSpec--;
+  if(f.attackTimer>0){ f.attackTimer--; if(f.attackTimer<=0 && f.state==="attack") f.state="idle"; }
+
+  var stunned = f.hitstun>0;
+  if(stunned) f.hitstun--;
+
+  f.shielding = !stunned && input.shield && f.onGround && f.state!=="attack";
+
+  if(!stunned && f.state!=="attack"){
+    var speed = f.onGround?3.7:3.1;
+    if(!f.shielding){
+      if(input.left){ f.vx = approach(f.vx,-speed, f.onGround?1.4:0.5); f.facing=-1; }
+      else if(input.right){ f.vx = approach(f.vx,speed, f.onGround?1.4:0.5); f.facing=1; }
+      else if(f.onGround){ f.vx = approach(f.vx,0,1.6); }
+      if(input.jumpPressed){
+        if(f.onGround){ f.vy=-12.4; f.jumps=1; f.onGround=false; sJump(); }
+        else if(f.jumps>0){ f.vy=-11.2; f.jumps--; spawnParticles(f.x,f.y,6,"#ffffff",2); sJump(); }
+      }
+      if(input.attack) startAttack(f,"attack");
+      else if(input.smash) startAttack(f,"smash");
+      else if(input.special) startAttack(f,"special");
+    } else if(f.onGround){ f.vx=approach(f.vx,0,2); }
+  }
+  /* consume one-frame presses */
+  input.attack=false; input.smash=false; input.special=false; input.jumpPressed=false;
+
+  /* gravity */
+  f.vy += GRAV;
+  if(input.down && !f.onGround && f.vy<MAXFALL+5) f.vy += 0.7; /* fast fall */
+  if(f.vy>MAXFALL) f.vy=MAXFALL;
+  if(!f.onGround && !stunned){ f.vx *= 0.995; }
+  if(stunned){ f.vx *= 0.99; }
+
+  var prevBottom=f.y;
+  f.x += f.vx; f.y += f.vy;
+
+  /* one-way platforms */
+  var wasGround=f.onGround;
+  f.onGround=false;
+  if(f.vy>=0){
+    for(var i=0;i<PLATFORMS.length;i++){
+      var p=PLATFORMS[i];
+      if(f.x>p.x-8 && f.x<p.x+p.w+8 && prevBottom<=p.y+1 && f.y>=p.y){
+        f.y=p.y; f.vy=0; f.onGround=true; f.jumps=2; break;
+      }
+    }
+  }
+  if(f.onGround && !wasGround){ spawnParticles(f.x,f.y,3,"#d8e6d0",1.2); }
+  if(Math.abs(f.vx)>0.4 && f.onGround) f.animWalk+=Math.abs(f.vx)*0.06; else f.animWalk=0;
+
+  /* melee hit check */
+  var hb=attackHitbox(f);
+  if(hb && !f.attackHitDone){
+    var fb=fighterBox(foe);
+    if(foe.state!=="dead" && hb.r>fb.l && hb.l<fb.r && hb.b>fb.t && hb.t<fb.b){
+      f.attackHitDone=true;
+      if(f.attackKind==="smash") applyHit(f,foe,13,5.2,0.105,f.facing,"smash");
+      else applyHit(f,foe,6,3.6,0.055,f.facing,"attack");
+    }
+  }
+
+  /* blast zones */
+  if(f.x<BLAST.left||f.x>BLAST.right||f.y<BLAST.top||f.y-f.h>BLAST.bottom){
+    koFighter(f);
+  }
+}
+function approach(v,target,step){ if(v<target) return Math.min(v+step,target); if(v>target) return Math.max(v-step,target); return v; }
+function respawn(f){
+  f.x = f.idx===0?400:560; f.y=150; f.vx=0; f.vy=0;
+  f.percent=0; f.state="idle"; f.hitstun=0; f.jumps=2; f.invincible=130;
+  showFlash(f.idx===0?"P1 復帰！":"P2 復帰！");
+}
+function koFighter(f){
+  if(f.state==="dead") return;
+  f.stocks--;
+  effects.push({x:Math.max(20,Math.min(W-20,f.x)), y:Math.max(20,Math.min(H-20,f.y-20)), life:26});
+  spawnParticles(Math.max(20,Math.min(W-20,f.x)), Math.max(20,Math.min(H-20,f.y-20)), 22, "#ffe27a", 6);
+  sKO(); showFlash("撃墜！");
+  updateHUD();
+  if(f.stocks<=0){
+    phase="over"; winner = f.idx===0?1:0;
+    showOverlay((winner===0?"PLAYER 1":"PLAYER 2")+" の勝ち！",
+      "最終結果 — P1 "+Math.round(fighters[0].percent)+"% / P2 "+Math.round(fighters[1].percent)+"% 。もう一度遊べます。",
+      "もう一度対戦");
+  }else{
+    f.state="dead"; f.respawnTimer=55; f.vx=0; f.vy=0;
+  }
+}
+function stepProjectiles(){
+  for(var i=projectiles.length-1;i>=0;i--){
+    var pr=projectiles[i]; pr.x+=pr.vx; pr.life--;
+    var foe=fighters[pr.owner===0?1:0];
+    var fb=fighterBox(foe);
+    if(!pr.hitDone && foe.state!=="dead" && pr.x>fb.l-6 && pr.x<fb.r+6 && pr.y>fb.t && pr.y<fb.b){
+      pr.hitDone=true;
+      applyHit(fighters[pr.owner], foe, 8, 4.0, 0.07, pr.vx>0?1:-1, "special");
+      projectiles.splice(i,1); continue;
+    }
+    if(pr.life<=0||pr.x<-40||pr.x>W+40) projectiles.splice(i,1);
+  }
+  for(var j=particles.length-1;j>=0;j--){
+    var pa=particles[j]; pa.x+=pa.vx; pa.y+=pa.vy; pa.vy+=0.12; pa.life--;
+    if(pa.life<=0) particles.splice(j,1);
+  }
+  for(var k=effects.length-1;k>=0;k--){ effects[k].life--; if(effects[k].life<=0) effects.splice(k,1); }
+}
+
+/* ================= CPU AI ================= */
+var aiThink=0, aiPlan={move:0,jump:false};
+function cpuInput(foe){
+  var out=blankInput();
+  aiThink--;
+  var me=p2;
+  var dx=foe.x-me.x, adx=Math.abs(dx);
+  var belowStage = me.y>430 || me.x<215 || me.x>745;
+  if(belowStage && !me.onGround){
+    /* recovery: head back to stage centre and jump */
+    out.left = me.x>480; out.right = me.x<480;
+    if(me.vy>1 && me.jumps>0 && (me.y>400)){ out.jumpPressed=true; }
+    if(me.y>470 && me.coolSpec<=0){ out.special=true; }
+    return out;
+  }
+  if(aiThink<=0){
+    aiThink=7+Math.floor(Math.random()*6);
+    aiPlan.move = adx>46 ? (dx>0?1:-1) : 0;
+    aiPlan.jump = (foe.y < me.y-50 && me.onGround && Math.random()<0.5) || (Math.random()<0.07 && me.onGround);
+  }
+  if(aiPlan.move<0) out.left=true; if(aiPlan.move>0) out.right=true;
+  if(aiPlan.jump){ out.jumpPressed=true; aiPlan.jump=false; }
+  if(adx<52 && Math.abs(foe.y-me.y)<58){
+    var r=Math.random();
+    if(me.percent>70 && Math.random()<0.25) out.shield=true;
+    else if(r<0.55) out.attack=true;
+    else if(r<0.78) out.smash=true;
+    else out.special=true;
+  }else if(adx>260 && Math.random()<0.03){
+    out.special=true;
+  }
+  if(foe.state==="attack" && adx<70 && Math.random()<0.3) out.shield=true;
+  return out;
+}
+
+/* ================= HUD / overlay ================= */
+function pctColor(p){ if(p<50) return "#ffffff"; if(p<100) return "#ffe066"; if(p<150) return "#ffb03a"; return "#ff5a4e"; }
+function updateHUD(){
+  for(var i=0;i<2;i++){
+    var f=fighters[i];
+    pctEls[i].innerHTML=Math.floor(f.percent)+"<small>%</small>";
+    pctEls[i].style.color=pctColor(f.percent);
+    var html="";
+    for(var s=0;s<3;s++) html+='<span class="stock s'+(i+1)+(s<f.stocks?"":" lost")+'"></span>';
+    stockEls[i].innerHTML=html;
+  }
+  nameEls[0].textContent = mode==="online" ? (onlineRole==="guest" ? "PLAYER 1（ホスト）" : "PLAYER 1（あなた）") : "PLAYER 1";
+  nameEls[1].textContent = mode==="cpu" ? "CPU" : (mode==="online" ? (onlineRole==="guest" ? "PLAYER 2（あなた）" : "PLAYER 2（友達）") : "PLAYER 2");
+}
+var flashTimer=null;
+function showFlash(text){
+  flashEl.textContent=text; flashEl.classList.add("show");
+  if(flashTimer) clearTimeout(flashTimer);
+  flashTimer=setTimeout(function(){ flashEl.classList.remove("show"); },800);
+}
+function showOverlay(title,text,btnLabel){
+  ovTitle.textContent=title; ovText.textContent=text;
+  btnStart.textContent=btnLabel||"バトル開始";
+  overlay.classList.add("show");
+}
+function hideOverlay(){ overlay.classList.remove("show"); }
+
+/* ================= game flow ================= */
+function resetMatch(){
+  p1=makeFighter(0,328,288); p2=makeFighter(1,632,288);
+  fighters=[p1,p2]; projectiles=[]; particles=[]; effects=[];
+  winner=-1; updateHUD();
+}
+function startCountdown(){
+  resetMatch(); hideOverlay(); phase="countdown"; countTimer=170;
+}
+btnStart.addEventListener("click",function(){
+  if(mode==="online" && !onlineConnected){
+    setOnlineStatus("オンラインは、ルーム作成または参加が完了してから開始できます。","err"); return;
+  }
+  startCountdown();
+});
+$("btn-restart").addEventListener("click",function(){
+  if(phase==="fight"||phase==="over") startCountdown();
+  else { resetMatch(); showOverlay("吹っ飛ばしバトル","攻撃を当てて相手の％を溜め、場外へ吹っ飛ばそう。ストック3つ、先に相手を全部落とした方が勝ち。","バトル開始"); phase="title"; }
+});
+
+/* mode switching */
+var onlinePanel=$("online-panel");
+function setMode(m){
+  mode=m;
+  ["cpu","local","online"].forEach(function(k){
+    $("mode-"+k).setAttribute("aria-pressed", k===m?"true":"false");
+  });
+  /* ルームコード入力欄は常に表示する（オンライン以外を選んでも隠さない） */
+  onlinePanel.classList.add("show");
+  $("touch-p2").classList.toggle("show", m==="local");
+  if(m==="online"){
+    setTimeout(function(){
+      onlinePanel.scrollIntoView({behavior:"smooth", block:"start"});
+      var jc=$("join-code"); if(jc) jc.focus({preventScroll:true});
+    }, 60);
+  }
+  phase="title"; resetMatch();
+  if(m==="cpu") showOverlay("CPU対戦","コンピュータとの1対1。％を溜めて場外へ吹っ飛ばそう。","バトル開始");
+  if(m==="local") showOverlay("ローカル2P対戦","同じ端末で2人対戦。P1は左側、P2は右側の操作です。","バトル開始");
+  if(m==="online") showOverlay("オンライン対戦","上のパネルでルームを作るか、友達のコードを入力して合流してください。接続できたら開始できます。","接続後に開始");
+  updateHUD();
+}
+$("mode-cpu").addEventListener("click",function(){ disconnectOnline(); setMode("cpu"); });
+$("mode-local").addEventListener("click",function(){ disconnectOnline(); setMode("local"); });
+$("mode-online").addEventListener("click",function(){ setMode("online"); });
+
+/* sound toggle */
+$("btn-sound").addEventListener("click",function(){
+  soundOn=!soundOn;
+  this.textContent = soundOn?"音：オン":"音：オフ";
+  this.setAttribute("aria-pressed", soundOn?"true":"false");
+});
+
+/* ================= drawing ================= */
+function drawBackground(){
+  var g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#6db3e2"); g.addColorStop(0.65,"#a8d3ee"); g.addColorStop(1,"#d9eefb");
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  /* sun */
+  ctx.fillStyle="rgba(255,236,170,.9)"; ctx.beginPath(); ctx.arc(848,72,34,0,7); ctx.fill();
+  /* clouds */
+  ctx.fillStyle="rgba(255,255,255,.85)";
+  cloud(120+Math.sin(frame*0.002)*8,70,1); cloud(430,44,0.7); cloud(700+Math.cos(frame*0.0016)*10,110,0.85); cloud(240,140,0.55);
+  /* distant hills */
+  ctx.fillStyle="#8fc98a"; ctx.beginPath(); ctx.moveTo(0,470);
+  ctx.quadraticCurveTo(200,410,420,462); ctx.quadraticCurveTo(660,505,960,448); ctx.lineTo(960,540); ctx.lineTo(0,540); ctx.fill();
+  ctx.fillStyle="#79b873"; ctx.beginPath(); ctx.moveTo(0,505);
+  ctx.quadraticCurveTo(300,462,560,498); ctx.quadraticCurveTo(780,522,960,492); ctx.lineTo(960,540); ctx.lineTo(0,540); ctx.fill();
+  /* blast zone hint: stage edges glow faintly red */
+  ctx.fillStyle="rgba(255,70,50,.10)";
+  ctx.fillRect(0,0,6,H); ctx.fillRect(W-6,0,6,H); ctx.fillRect(0,0,W,6);
+}
+function cloud(x,y,s){
+  ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
+  ctx.beginPath(); ctx.arc(0,0,22,0,7); ctx.arc(24,-6,28,0,7); ctx.arc(52,0,20,0,7); ctx.arc(26,8,26,0,7); ctx.fill();
+  ctx.restore();
+}
+function drawPlatforms(){
+  PLATFORMS.forEach(function(p,i){
+    var main=i===0;
+    ctx.fillStyle= main?"#7a5a38":"#6d5133";
+    roundRect(p.x,p.y,p.w,p.h+(main?44:8),6); ctx.fill();
+    ctx.fillStyle= main?"#58b368":"#63bd72";
+    roundRect(p.x,p.y,p.w,10,5); ctx.fill();
+    ctx.fillStyle="rgba(0,0,0,.12)";
+    for(var x=p.x+14;x<p.x+p.w-8;x+=34){ ctx.fillRect(x,p.y+(main?22:13),14,3); }
+  });
+}
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function drawFighter(f){
+  if(f.state==="dead") return;
+  if(f.invincible>0 && Math.floor(frame/4)%2===0 && phase==="fight") { /* blink */ }
+  var blink = f.invincible>0 && Math.floor(frame/4)%2===0;
+  ctx.save();
+  ctx.translate(f.x,f.y);
+  ctx.globalAlpha = blink?0.35:1;
+  var bob = f.onGround && Math.abs(f.vx)>0.4 ? Math.sin(f.animWalk*6)*1.6 : 0;
+  var crouch = f.shielding?3:0;
+  /* shadow */
+  ctx.fillStyle="rgba(0,0,0,.18)";
+  ctx.beginPath(); ctx.ellipse(0,3,20,5,0,0,7); ctx.fill();
+  /* legs */
+  ctx.fillStyle=f.color.dark;
+  var legSwing = f.onGround && Math.abs(f.vx)>0.4 ? Math.sin(f.animWalk*6)*6 : 0;
+  roundRect(-13+legSwing, -16+bob, 10, 16, 4); ctx.fill();
+  roundRect(3-legSwing, -16+bob, 10, 16, 4); ctx.fill();
+  /* body */
+  ctx.fillStyle=f.color.body;
+  roundRect(-f.w/2, -f.h+8+bob+crouch, f.w, 34, 9); ctx.fill();
+  /* belt */
+  ctx.fillStyle="rgba(255,255,255,.85)"; ctx.fillRect(-f.w/2, -f.h+32+bob+crouch, f.w, 4);
+  /* head */
+  ctx.fillStyle=f.color.skin;
+  ctx.beginPath(); ctx.arc(0,-f.h+2+bob+crouch,13,0,7); ctx.fill();
+  /* headband */
+  ctx.fillStyle=f.color.body; ctx.fillRect(-13,-f.h+0+bob+crouch,26,5);
+  ctx.fillRect(f.facing*-22,-f.h+1+bob+crouch,9,3);
+  /* eye */
+  ctx.fillStyle="#17201a";
+  ctx.beginPath(); ctx.arc(f.facing*5,-f.h+4+bob+crouch,2.2,0,7); ctx.fill();
+  /* arm / attack */
+  var hb=attackHitbox(f);
+  ctx.fillStyle=f.color.body;
+  if(f.state==="attack" && f.attackKind){
+    var reach = f.attackKind==="smash"?46:36;
+    var ext = hb? reach : reach*0.45;
+    roundRect(f.facing>0? 8 : -8-ext, -f.h+22+bob, ext, 10, 5); ctx.fill();
+    ctx.fillStyle=f.color.skin;
+    ctx.beginPath(); ctx.arc(f.facing*(14+ext), -f.h+27+bob, 6.5, 0, 7); ctx.fill();
+    if(f.attackKind==="smash" && hb){
+      ctx.strokeStyle="rgba(255,220,90,.85)"; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(f.facing*(14+ext), -f.h+27+bob, 13+Math.random()*3, 0, 7); ctx.stroke();
+    }
+  }else{
+    roundRect(f.facing>0? 10 : -19, -f.h+22+bob, 9, 20, 4); ctx.fill();
+  }
+  ctx.restore();
+  /* shield bubble */
+  if(f.shielding){
+    ctx.save();
+    ctx.strokeStyle="rgba(120,200,255,.9)"; ctx.fillStyle="rgba(120,200,255,.20)"; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(f.x, f.y-f.h/2, 36, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  /* off-screen indicator */
+  if(f.x<10||f.x>W-10||f.y-f.h<6){
+    var ix=Math.max(24,Math.min(W-24,f.x)), iy=Math.max(24,Math.min(H-24,f.y-30));
+    ctx.save();
+    ctx.fillStyle=f.color.body;
+    ctx.beginPath(); ctx.arc(ix,iy,13,0,7); ctx.fill();
+    ctx.fillStyle="#fff"; ctx.font="900 12px sans-serif"; ctx.textAlign="center";
+    ctx.fillText(Math.floor(f.percent)+"%", ix, iy+4);
+    ctx.restore();
+  }
+}
+function drawProjectiles(){
+  projectiles.forEach(function(pr){
+    ctx.save();
+    var owner= fighters[pr.owner];
+    ctx.fillStyle= owner.idx===0? "#57b6ff":"#ff7a5c";
+    ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=12;
+    ctx.beginPath(); ctx.arc(pr.x,pr.y,9+Math.sin(frame*0.5)*1.5,0,7); ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,.85)";
+    ctx.beginPath(); ctx.arc(pr.x,pr.y,3.5,0,7); ctx.fill();
+    ctx.restore();
+  });
+}
+function drawParticles(){
+  particles.forEach(function(pa){
+    ctx.globalAlpha=Math.max(0,pa.life/22);
+    ctx.fillStyle=pa.color;
+    ctx.fillRect(pa.x-pa.size/2,pa.y-pa.size/2,pa.size,pa.size);
+  });
+  ctx.globalAlpha=1;
+  effects.forEach(function(e){
+    ctx.save(); ctx.globalAlpha=e.life/26;
+    ctx.strokeStyle="#ffd94d"; ctx.lineWidth=4;
+    for(var i=0;i<8;i++){
+      var a=i*Math.PI/4, r=(26-e.life)*2.4;
+      ctx.beginPath();
+      ctx.moveTo(e.x+Math.cos(a)*r*0.4, e.y+Math.sin(a)*r*0.4);
+      ctx.lineTo(e.x+Math.cos(a)*r, e.y+Math.sin(a)*r);
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
+}
+function draw(){
+  drawBackground();
+  drawPlatforms();
+  drawProjectiles();
+  drawFighter(p1); drawFighter(p2);
+  drawParticles();
+  if(phase==="countdown"){
+    var remain=Math.ceil(countTimer/55);
+    countdownEl.textContent = countTimer>30 ? String(Math.min(3,remain)) : "GO!";
+  }
+}
+
+/* ================= online (PeerJS) ================= */
+var peer=null, conn=null, onlineConnected=false, myRoomCode="";
+var statusEl=$("online-status");
+function setOnlineStatus(msg, cls){
+  statusEl.textContent=msg||"";
+  statusEl.className="status-line"+(cls?" "+cls:"");
+}
+function codeGen(){
+  var chars="ABCDEFGHJKMNPQRSTUVWXYZ23456789", s="";
+  for(var i=0;i<4;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+function disconnectOnline(){
+  try{ if(conn) conn.close(); }catch(e){}
+  try{ if(peer) peer.destroy(); }catch(e){}
+  peer=null; conn=null; onlineConnected=false; onlineRole=null;
+}
+$("btn-create-room").addEventListener("click",function(){
+  if(mode!=="online") setMode("online");
+  if(typeof Peer==="undefined"){ setOnlineStatus("通信ライブラリを読み込めませんでした。ネット接続を確認して開き直してください。","err"); return; }
+  disconnectOnline();
+  myRoomCode=codeGen();
+  var disp=$("room-code");
+  disp.textContent=myRoomCode; disp.classList.remove("empty");
+  $("btn-copy-code").disabled=false;
+  setOnlineStatus("接続を準備しています…","wait");
+  peer=new Peer("sumabura-battle-"+myRoomCode);
+  peer.on("open",function(){ setOnlineStatus("ルームを作成しました。コード「"+myRoomCode+"」を友達に伝えてください。相手の参加を待っています…","wait"); });
+  peer.on("connection",function(c){
+    conn=c; onlineRole="host";
+    conn.on("open",function(){
+      onlineConnected=true;
+      setOnlineStatus("友達が参加しました！「接続後に開始」ボタンで対戦を開始してください。","ok");
+      btnStart.textContent="バトル開始";
+    });
+    conn.on("data",function(data){ if(data && data.t==="input"){ remoteInput=data.i; } });
+    conn.on("close",function(){ onlineConnected=false; setOnlineStatus("相手との接続が切れました。","err"); });
+  });
+  peer.on("error",function(err){
+    if(err.type==="unavailable-id"){ setOnlineStatus("そのコードは使用中でした。もう一度「ルームを作る」を押してください。","err"); }
+    else setOnlineStatus("接続エラーが発生しました（"+err.type+"）。開き直して試してください。","err");
+  });
+});
+$("btn-copy-code").addEventListener("click",function(){
+  var btn=this;
+  function done(){ btn.textContent="コピーしました"; setTimeout(function(){btn.textContent="コードをコピー";},1500); }
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(myRoomCode).then(done,done); }
+  else done();
+});
+$("btn-join-room").addEventListener("click",function(){
+  var code=$("join-code").value.trim().toUpperCase();
+  $("join-code").value=code;
+  if(code.length!==4){ setOnlineStatus("4文字のコードを入力してください。上の「ルームコードを入力」欄に友達のコードを入れてください。","err"); $("join-code").focus(); return; }
+  if(mode!=="online") setMode("online");
+  if(typeof Peer==="undefined"){ setOnlineStatus("通信ライブラリを読み込めませんでした。ネット接続を確認して開き直してください。","err"); return; }
+  disconnectOnline();
+  setOnlineStatus("ルーム「"+code+"」に接続しています…","wait");
+  peer=new Peer();
+  peer.on("open",function(){
+    conn=peer.connect("sumabura-battle-"+code,{reliable:true});
+    onlineRole="guest";
+    conn.on("open",function(){
+      onlineConnected=true;
+      setOnlineStatus("ホストに接続しました！ホストが対戦を開始するのを待ってください。","ok");
+    });
+    conn.on("data",function(data){
+      if(!data) return;
+      if(data.t==="state"){ applyRemoteState(data.s); }
+      if(data.t==="start"){ startCountdown(); }
+      if(data.t==="phase" && data.phase==="over"){ /* handled via state */ }
+    });
+    conn.on("close",function(){ onlineConnected=false; setOnlineStatus("ホストとの接続が切れました。","err"); });
+  });
+  peer.on("error",function(err){
+    if(err.type==="peer-unavailable"){ setOnlineStatus("そのコードのルームが見つかりません。コードを確認してください。","err"); }
+    else setOnlineStatus("接続エラーが発生しました（"+err.type+"）。","err");
+  });
+});
+$("join-code").addEventListener("input",function(){ this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,""); });
+$("join-code").addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); $("btn-join-room").click(); } });
+function serializeFighter(f){
+  return {x:f.x,y:f.y,vx:f.vx,vy:f.vy,facing:f.facing,percent:f.percent,stocks:f.stocks,state:f.state,
+    attackKind:f.attackKind,attackTimer:f.attackTimer,shielding:f.shielding,invincible:f.invincible,animWalk:f.animWalk,onGround:f.onGround};
+}
+function applyFighter(f,s){
+  for(var k in s) f[k]=s[k];
+}
+function applyRemoteState(s){
+  if(!s) return;
+  applyFighter(p1,s.p1); applyFighter(p2,s.p2);
+  projectiles=s.projs||[];
+  if(s.phase && s.phase!==phase && s.phase==="over"){ phase="over"; winner=s.winner;
+    showOverlay((winner===0?"PLAYER 1":"PLAYER 2")+" の勝ち！","ホスト側の結果です。もう一度遊ぶ場合はホストが開始してください。","ホストの開始を待っています");
+  }
+  if(s.phase==="fight" && phase!=="fight" && phase!=="countdown"){ phase="fight"; hideOverlay(); }
+  updateHUD();
+}
+var netTick=0;
+function netSync(){
+  if(mode!=="online"||!onlineConnected||!conn||!conn.open) return;
+  if(onlineRole==="guest"){
+    conn.send({t:"input", i:{left:inputP2.left,right:inputP2.right,jump:inputP2.jump,jumpPressed:inputP2.jumpPressed,down:inputP2.down,attack:inputP2.attack,smash:inputP2.smash,special:inputP2.special,shield:inputP2.shield}});
+  }else if(onlineRole==="host"){
+    netTick++;
+    if(netTick%2===0){
+      conn.send({t:"state", s:{p1:serializeFighter(p1), p2:serializeFighter(p2),
+        projs:projectiles.map(function(pr){return {x:pr.x,y:pr.y,vx:pr.vx,owner:pr.owner,life:pr.life};}),
+        phase:phase, winner:winner}});
+    }
+  }
+}
+/* host notifies guest when starting */
+var origStart=startCountdown;
+startCountdown=function(){
+  origStart();
+  if(mode==="online" && onlineRole==="host" && conn && conn.open){ try{ conn.send({t:"start"}); }catch(e){} }
+};
+
+/* ================= main loop ================= */
+function collectInputs(){
+  var kb1=blankInput(), kb2=blankInput();
+  readKeyboard(KEYMAP_P1,kb1,"p1");
+  readKeyboard(KEYMAP_P2,kb2,"p2");
+  /* tap attacks are edge-triggered: convert held keyboard attack to single press */
+  edgeAttack(kb1,"p1"); edgeAttack(kb2,"p2");
+  mergeInputs(kb1,touchP1,inputP1);
+  mergeInputs(kb2,touchP2,inputP2);
+  /* touch attack buttons are also edge-triggered via pointerdown flag handling:
+     they stay true while held; convert to pulse using previous state */
+  pulseTouch(touchP1); pulseTouch(touchP2);
+}
+var prevAtk={};
+function edgeAttack(inp,who){
+  ["attack","smash","special"].forEach(function(k){
+    var key=who+k;
+    var held=inp[k];
+    inp[k]= held && !prevAtk[key];
+    prevAtk[key]=held;
+  });
+}
+var prevTouch={};
+function pulseTouch(t){
+  ["attack","smash","special"].forEach(function(k){
+    /* touch sets true on pointerdown; after one frame consumed in stepFighter it resets.
+       Here ensure a held touch doesn't refire every frame: stepFighter clears attack flags
+       on the merged input, not on touch object, so gate by cooldown in startAttack anyway. */
+  });
+}
+function loop(){
+  requestAnimationFrame(loop);
+  frame++;
+  collectInputs();
+  if(phase==="countdown"){
+    countTimer--;
+    countdownEl.classList.add("show");
+    if(countTimer<=0){ phase="fight"; countdownEl.classList.remove("show"); }
+  }else{
+    countdownEl.classList.remove("show");
+  }
+  if(phase==="fight"){
+    if(mode==="online" && onlineRole==="guest"){
+      /* guest: send own input (as P2), render host state */
+      inputP2.left=inputP1.left; inputP2.right=inputP1.right; inputP2.jump=inputP1.jump;
+      inputP2.jumpPressed=inputP1.jumpPressed; inputP2.shield=inputP1.shield;
+      if(inputP1.attack)inputP2.attack=true; if(inputP1.smash)inputP2.smash=true; if(inputP1.special)inputP2.special=true;
+      netSync();
+      /* still animate particles locally */
+      for(var j=particles.length-1;j>=0;j--){ particles[j].life--; if(particles[j].life<=0)particles.splice(j,1); }
+    }else{
+      var in2;
+      if(mode==="cpu") in2=cpuInput(p1);
+      else if(mode==="local") in2=inputP2;
+      else if(mode==="online") in2=remoteInput;
+      else in2=blankInput();
+      stepFighter(p1,inputP1,p2);
+      stepFighter(p2,in2,p1);
+      /* remote input presses are consumed */
+      remoteInput.attack=false; remoteInput.smash=false; remoteInput.special=false; remoteInput.jumpPressed=false;
+      stepProjectiles();
+      updateHUD();
+      netSync();
+    }
+  }
+  draw();
+}
+/* prevent page scroll on space/arrows while playing */
+window.addEventListener("keydown",function(e){ if(e.code==="Space") e.preventDefault(); });
+
+resetMatch();
+updateHUD();
+loop();
+})();
+</script>
+</body>
+</html>
